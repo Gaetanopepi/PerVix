@@ -2,9 +2,9 @@ import re
 from typing import Dict, Tuple, Optional
 from urllib.parse import urljoin, urlparse, unquote
 
-import aiohttp
+from httpx import Response
 
-from mediaflow_proxy.extractors.base import BaseExtractor, ExtractorError, HttpResponse
+from mediaflow_proxy.extractors.base import BaseExtractor, ExtractorError
 
 
 class LiveTVExtractor(BaseExtractor):
@@ -33,21 +33,20 @@ class LiveTVExtractor(BaseExtractor):
             stream_title: Optional stream title to filter specific stream
 
         Returns:
-            Dict containing destination_url, request_headers, and mediaflow_endpoint
+            Tuple[str, Dict[str, str]]: Stream URL and required headers
         """
         try:
             # Get the channel page
             response = await self._make_request(url)
-            response_text = response.text
             self.base_headers["referer"] = urljoin(url, "/")
 
             # Extract player API details
-            player_api_base, method = await self._extract_player_api_base(response_text)
+            player_api_base, method = await self._extract_player_api_base(response.text)
             if not player_api_base:
                 raise ExtractorError("Failed to extract player API URL")
 
             # Get player options
-            options_data = await self._get_player_options(response_text)
+            options_data = await self._get_player_options(response.text)
             if not options_data:
                 raise ExtractorError("No player options found")
 
@@ -67,7 +66,7 @@ class LiveTVExtractor(BaseExtractor):
                     if not stream_url:
                         continue
 
-                    result = {
+                    response = {
                         "destination_url": stream_url,
                         "request_headers": self.base_headers,
                         "mediaflow_endpoint": self.mediaflow_endpoint,
@@ -76,7 +75,7 @@ class LiveTVExtractor(BaseExtractor):
                     # Set endpoint based on stream type
                     if stream_data.get("type") == "mpd":
                         if stream_data.get("drm_key_id") and stream_data.get("drm_key"):
-                            result.update(
+                            response.update(
                                 {
                                     "query_params": {
                                         "key_id": stream_data["drm_key_id"],
@@ -86,7 +85,7 @@ class LiveTVExtractor(BaseExtractor):
                                 }
                             )
 
-                    return result
+                    return response
 
             raise ExtractorError("No valid stream found")
 
@@ -121,12 +120,7 @@ class LiveTVExtractor(BaseExtractor):
             api_url = f"{api_base}{post}/{type_}/{nume}"
             response = await self._make_request(api_url)
         else:
-            # Use aiohttp FormData for POST requests
-            form_data = aiohttp.FormData()
-            form_data.add_field("action", "doo_player_ajax")
-            form_data.add_field("post", post)
-            form_data.add_field("nume", nume)
-            form_data.add_field("type", type_)
+            form_data = {"action": "doo_player_ajax", "post": post, "nume": nume, "type": type_}
             response = await self._make_request(api_base, method="POST", data=form_data)
 
         # Get iframe URL from API response
@@ -142,7 +136,7 @@ class LiveTVExtractor(BaseExtractor):
         except Exception as e:
             raise ExtractorError(f"Failed to process player option: {str(e)}")
 
-    async def _extract_stream_url(self, iframe_response: HttpResponse, iframe_url: str) -> Dict:
+    async def _extract_stream_url(self, iframe_response: Response, iframe_url: str) -> Dict:
         """
         Extract final stream URL from iframe content.
         """
@@ -153,9 +147,8 @@ class LiveTVExtractor(BaseExtractor):
 
             # Check if content is already a direct M3U8 stream
             content_types = ["application/x-mpegurl", "application/vnd.apple.mpegurl"]
-            content_type = iframe_response.headers.get("content-type", "")
 
-            if any(ext in content_type for ext in content_types):
+            if any(ext in iframe_response.headers["content-type"] for ext in content_types):
                 return {"url": iframe_url, "type": "m3u8"}
 
             stream_data = {}

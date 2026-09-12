@@ -1,7 +1,7 @@
 bs4
 dateparser
 python-dotenv
-fastapi<0.137.0
+fastapi
 uvicorn
 tzdata
 lxml
@@ -18,8 +18,3 @@ cachetools
 tqdm
 aiofiles
 psutil
-anyio
-telethon
-av
-aiohttp
-cryptography

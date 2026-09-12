@@ -52,7 +52,7 @@ class EncryptionHandler:
                 del data["ip"]  # Remove IP from the data
 
             return data
-        except Exception:
+        except Exception as e:
             raise HTTPException(status_code=401, detail="Invalid or expired token")
 
 

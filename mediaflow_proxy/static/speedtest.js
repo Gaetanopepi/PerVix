@@ -81,27 +81,6 @@ class MediaFlowSpeedTest {
         firstServerUrl.value = baseUrl;
         firstServerUrl.placeholder = `${baseUrl} (Current Instance)`;
 
-        // The top "MediaFlow API Password" (#currentApiPassword) is the
-        // source of truth; hydrate from localStorage (shared with the URL
-        // generator) and persist edits back.  Per-server fields are treated
-        // as optional overrides (see collectServerConfigurations).
-        const topPw = document.getElementById('currentApiPassword');
-        const saved = localStorage.getItem('mediaflow_api_password');
-        if (topPw) {
-            if (saved && !topPw.value) topPw.value = saved;
-            topPw.addEventListener('input', () => {
-                const v = topPw.value.trim();
-                if (v) localStorage.setItem('mediaflow_api_password', v);
-                else localStorage.removeItem('mediaflow_api_password');
-            });
-        }
-
-        // Relabel the per-server field so users realise it's an override
-        // rather than a second required field.
-        document.querySelectorAll('.server-password').forEach(el => {
-            el.placeholder = 'Override password (blank = use main)';
-        });
-
         // Show placeholder CDN selection initially
         this.showPlaceholderCdnSelection();
         this.updateCdnButtonStates();
@@ -154,7 +133,7 @@ class MediaFlowSpeedTest {
                     <div class="flex gap-2">
                         <input
                             type="password"
-                            placeholder="Override password (blank = use main)"
+                            placeholder="API Password (optional)"
                             class="server-password flex-1 px-3 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                         >
                         <button
@@ -237,16 +216,11 @@ class MediaFlowSpeedTest {
         // Collect server configurations
         this.servers = [];
         const serverInputs = document.querySelectorAll('.server-input');
-        // Fall back to the top #currentApiPassword when a server's per-row
-        // override is blank — saves single-server users from typing the
-        // password twice.
-        const mainPassword = (document.getElementById('currentApiPassword')?.value || '').trim();
 
         serverInputs.forEach(input => {
             const url = input.querySelector('.server-url').value.trim();
             const name = input.querySelector('.server-name').value.trim();
-            const override = input.querySelector('.server-password').value.trim();
-            const password = override || mainPassword;
+            const password = input.querySelector('.server-password').value.trim();
 
             if (url) {
                 this.servers.push({
@@ -451,14 +425,12 @@ class MediaFlowSpeedTest {
             'Content-Type': 'application/json',
         };
 
-        // Build URL with api_password as query parameter if provided
-        // This is more reliable than headers when behind reverse proxies
-        let configUrl = '/speedtest/config';
+        // Add current API password to headers if provided
         if (currentApiPassword) {
-            configUrl += `?api_password=${encodeURIComponent(currentApiPassword)}`;
+            headers['api_password'] = currentApiPassword;
         }
 
-        const response = await fetch(configUrl, {
+        const response = await fetch('/speedtest/config', {
             method: 'POST',
             headers: headers,
             body: JSON.stringify(requestBody)
